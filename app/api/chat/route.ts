@@ -1,3 +1,6 @@
+export const runtime = 'edge';
+export const maxDuration = 60;
+
 import { google } from '@ai-sdk/google';
 import { streamText } from 'ai';
 import { createClient } from '@supabase/supabase-js';
@@ -6,8 +9,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
-
-export const maxDuration = 30;
 
 export async function POST(req: Request) {
   try {
