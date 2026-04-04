@@ -590,12 +590,19 @@ export default function Page() {
           className="border-t border-zinc-800 bg-zinc-900 px-6 py-4"
         >
           <div className="mx-auto flex max-w-4xl gap-3">
-            <input
+            <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              className="flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:border-green-500 focus:outline-none"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+              rows={2}
+              className="flex-1 resize-none rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:border-green-500 focus:outline-none"
               placeholder="Type your response..."
-              disabled={isLoading || isCompleted || !!activeDisruption}
+              disabled={isCompleted || !!activeDisruption}
             />
             <button
               type="submit"
