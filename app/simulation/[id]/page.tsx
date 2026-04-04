@@ -370,6 +370,7 @@ export default function Page() {
   useEffect(() => {
     if (!scenario || hasInitializedRef.current) return;
     if (isFreightExchangeScenario && !selectedOffer) return;
+    if (isFreightExchangeScenario && selectedOffer) return;
     hasInitializedRef.current = true;
     streamAssistantMessage([]);
   }, [scenario, selectedOffer, isFreightExchangeScenario, streamAssistantMessage]);
