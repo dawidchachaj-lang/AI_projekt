@@ -5,6 +5,17 @@ import { google } from '@ai-sdk/google';
 import { streamText } from 'ai';
 import { createClient } from '@supabase/supabase-js';
 
+type IncomingMessage = {
+  role?: string;
+  content?: string;
+};
+
+type SelectedOffer = {
+  route: string;
+  cargo: string;
+  startingRate: number;
+};
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -12,7 +23,11 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
-    const { messages = [], scenarioId } = await req.json();
+    const { messages = [], scenarioId, selectedOffer } = (await req.json()) as {
+      messages?: IncomingMessage[];
+      scenarioId?: string;
+      selectedOffer?: SelectedOffer | null;
+    };
     if (!scenarioId) {
       return new Response(JSON.stringify({ error: 'Missing scenarioId' }), { status: 400 });
     }
@@ -27,25 +42,36 @@ export async function POST(req: Request) {
       return new Response(JSON.stringify({ error: 'Scenario not found' }), { status: 404 });
     }
 
+    const promptWithOffer =
+      selectedOffer &&
+      typeof selectedOffer.route === 'string' &&
+      typeof selectedOffer.cargo === 'string' &&
+      typeof selectedOffer.startingRate === 'number'
+        ? scenario.system_prompt
+            .replace(/\{wybrana_trasa\}/g, selectedOffer.route)
+            .replace(/\{wybrany_towar\}/g, selectedOffer.cargo)
+            .replace(/\{wybrana_stawka\}/g, String(selectedOffer.startingRate))
+        : scenario.system_prompt;
+
     const normalizedMessages = Array.isArray(messages)
       ? messages
-          .map((message: { role?: string; content?: string }) => ({
-            role: message.role,
-            content: message.content,
-          }))
-          .filter((message) => message.role && typeof message.content === 'string')
+          .filter(
+            (message): message is { role: 'user' | 'assistant' | 'system'; content: string } =>
+              (message.role === 'user' || message.role === 'assistant' || message.role === 'system') &&
+              typeof message.content === 'string',
+          )
       : [];
 
     const result = streamText(
       normalizedMessages.length > 0
         ? {
             model: google('gemini-3-flash-preview'),
-            system: scenario.system_prompt,
+            system: promptWithOffer,
             messages: normalizedMessages,
           }
         : {
             model: google('gemini-3-flash-preview'),
-            system: scenario.system_prompt,
+            system: promptWithOffer,
             prompt: 'Start the scenario and speak first.',
           },
     );

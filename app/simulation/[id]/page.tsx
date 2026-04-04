@@ -43,6 +43,13 @@ type DisruptionEvent = {
   body: string;
 };
 
+type FreightOffer = {
+  id: string;
+  route: string;
+  cargo: string;
+  startingRate: number;
+};
+
 const cleanContent = (text: string) => {
   if (!text) return '';
   return text.replace(/<coach_eval>[\s\S]*?<\/coach_eval>/g, '').trim();
@@ -116,6 +123,19 @@ const extractEvaluation = (text: string) => {
 const INACTIVITY_TIMEOUT_MS = 180_000;
 const INACTIVITY_SYSTEM_MESSAGE =
   '[SYSTEM: BRAK ODPOWIEDZI SPEDYTIORA. Minął czas. Wyślij krótkie ponaglenie.]';
+const FREIGHT_EXCHANGE_SCENARIO_TITLE = 'Giełda transportowa - walka o 100 EUR';
+const freightExchangeOffers: FreightOffer[] = [
+  { id: 'offer-1', route: 'Warszawa -> Paryż', cargo: '24t, chłodnia', startingRate: 1200 },
+  { id: 'offer-2', route: 'Poznań -> Berlin', cargo: '21t, firanka', startingRate: 850 },
+  { id: 'offer-3', route: 'Łódź -> Mediolan', cargo: '18t, plandeka', startingRate: 1350 },
+  { id: 'offer-4', route: 'Gdańsk -> Rotterdam', cargo: '20t, kontener 40HC', startingRate: 980 },
+  { id: 'offer-5', route: 'Wrocław -> Wiedeń', cargo: '22t, ADR kl. 3', startingRate: 1100 },
+  { id: 'offer-6', route: 'Katowice -> Praga', cargo: '16t, chłodnia', startingRate: 760 },
+  { id: 'offer-7', route: 'Szczecin -> Hamburg', cargo: '24t, firanka', startingRate: 890 },
+  { id: 'offer-8', route: 'Lublin -> Bruksela', cargo: '19t, plandeka', startingRate: 1280 },
+  { id: 'offer-9', route: 'Białystok -> Lyon', cargo: '23t, chłodnia', startingRate: 1490 },
+  { id: 'offer-10', route: 'Rzeszów -> Antwerpia', cargo: '20t, firanka', startingRate: 1320 },
+];
 const disruptionEvents: DisruptionEvent[] = [
   {
     title: '🚨 BRAK DOKUMENTÓW',
@@ -161,6 +181,7 @@ export default function Page() {
   const [hadDisruption, setHadDisruption] = useState(false);
   const [disruptionType, setDisruptionType] = useState<string | null>(null);
   const [activeDisruption, setActiveDisruption] = useState<DisruptionEvent | null>(null);
+  const [selectedOffer, setSelectedOffer] = useState<FreightOffer | null>(null);
   const hasInitializedRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inactivityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -225,6 +246,9 @@ export default function Page() {
     setIsDisruptedSession(isDisruptedSession);
   }, []);
 
+  const isFreightExchangeScenario = scenario?.title === FREIGHT_EXCHANGE_SCENARIO_TITLE;
+  const showFreightExchangeStep = !!isFreightExchangeScenario && !selectedOffer;
+
   const saveSimulationResults = useCallback(
     async (scores: EvaluationResult, chatHistory: ChatMessage[]) => {
       if (!scenarioId) return;
@@ -266,6 +290,13 @@ export default function Page() {
             content: message.content,
           })),
           scenarioId,
+          selectedOffer: selectedOffer
+            ? {
+                route: selectedOffer.route,
+                cargo: selectedOffer.cargo,
+                startingRate: selectedOffer.startingRate,
+              }
+            : null,
         }),
       });
 
@@ -327,16 +358,32 @@ export default function Page() {
         }, INACTIVITY_TIMEOUT_MS);
       }
     }
-  }, [scenarioId, isCompleted, clearInactivityTimer, clearDisruptionTimer, saveSimulationResults]);
+  }, [
+    scenarioId,
+    selectedOffer,
+    isCompleted,
+    clearInactivityTimer,
+    clearDisruptionTimer,
+    saveSimulationResults,
+  ]);
 
   useEffect(() => {
     if (!scenario || hasInitializedRef.current) return;
+    if (isFreightExchangeScenario && !selectedOffer) return;
     hasInitializedRef.current = true;
     streamAssistantMessage([]);
-  }, [scenario, streamAssistantMessage]);
+  }, [scenario, selectedOffer, isFreightExchangeScenario, streamAssistantMessage]);
 
   useEffect(() => {
-    if (!scenario || !isDisruptedSession || isCompleted || hasDisruptionScheduledRef.current) return;
+    if (
+      !scenario ||
+      !isDisruptedSession ||
+      isCompleted ||
+      hasDisruptionScheduledRef.current ||
+      (isFreightExchangeScenario && !selectedOffer)
+    ) {
+      return;
+    }
     hasDisruptionScheduledRef.current = true;
     const delayMs = (30 + Math.random() * 30) * 1000;
     disruptionTimeoutRef.current = setTimeout(() => {
@@ -347,7 +394,7 @@ export default function Page() {
       setDisruptionType(randomEvent.title);
       setActiveDisruption(randomEvent);
     }, delayMs);
-  }, [scenario, isDisruptedSession, isCompleted]);
+  }, [scenario, isDisruptedSession, isCompleted, isFreightExchangeScenario, selectedOffer]);
 
   useEffect(() => {
     return () => {
@@ -409,32 +456,71 @@ export default function Page() {
       </header>
 
       <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="mx-auto flex max-w-4xl flex-col gap-4">
-          {messages.filter((message) => !message.hidden).map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
-                  message.role === 'user'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-zinc-900 text-zinc-100 border border-zinc-800'
-                }`}
-              >
-                <div className="whitespace-pre-wrap">{cleanContent(message.content)}</div>
-              </div>
+        {showFreightExchangeStep ? (
+          <div className="mx-auto w-full max-w-5xl rounded-2xl border border-zinc-800 bg-zinc-900 p-4 md:p-6">
+            <h2 className="text-xl font-semibold text-white">Giełda Transportowa</h2>
+            <p className="mt-1 text-sm text-zinc-400">
+              Wybierz ofertę i rozpocznij negocjacje z klientem.
+            </p>
+            <div className="mt-5 overflow-x-auto rounded-xl border border-zinc-800">
+              <table className="min-w-full text-left">
+                <thead className="bg-zinc-950/80 text-xs uppercase tracking-wide text-zinc-400">
+                  <tr>
+                    <th className="px-4 py-3">Trasa</th>
+                    <th className="px-4 py-3">Towar</th>
+                    <th className="px-4 py-3">Stawka Startowa</th>
+                    <th className="px-4 py-3 text-right">Akcja</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800 text-sm">
+                  {freightExchangeOffers.map((offer) => (
+                    <tr key={offer.id} className="bg-zinc-900/70 text-zinc-200">
+                      <td className="px-4 py-3 font-medium">{offer.route}</td>
+                      <td className="px-4 py-3">{offer.cargo}</td>
+                      <td className="px-4 py-3">{offer.startingRate} EUR</td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOffer(offer)}
+                          className="rounded-lg bg-green-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-green-500"
+                        >
+                          Negocjuj
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-          {isLoading && (
-            <div className="text-xs text-zinc-500">AI is typing...</div>
-          )}
-          {error && <div className="text-xs text-red-400">{error}</div>}
-          <div ref={messagesEndRef} />
-        </div>
+          </div>
+        ) : (
+          <div className="mx-auto flex max-w-4xl flex-col gap-4">
+            {messages.filter((message) => !message.hidden).map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
+                    message.role === 'user'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-zinc-900 text-zinc-100 border border-zinc-800'
+                  }`}
+                >
+                  <div className="whitespace-pre-wrap">{cleanContent(message.content)}</div>
+                </div>
+              </div>
+            ))}
+            {isLoading && (
+              <div className="text-xs text-zinc-500">AI is typing...</div>
+            )}
+            {error && <div className="text-xs text-red-400">{error}</div>}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
       </div>
 
-      {evaluation ? (
+      {showFreightExchangeStep ? null : evaluation ? (
         <div className="border-t border-zinc-800 bg-zinc-900 px-6 py-6">
           <div className="mx-auto w-full max-w-4xl rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
             <div className="flex items-center justify-between">
