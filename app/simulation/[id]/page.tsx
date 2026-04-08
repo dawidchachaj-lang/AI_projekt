@@ -124,18 +124,42 @@ const INACTIVITY_TIMEOUT_MS = 180_000;
 const INACTIVITY_SYSTEM_MESSAGE =
   '[SYSTEM: BRAK ODPOWIEDZI SPEDYTIORA. Minął czas. Wyślij krótkie ponaglenie.]';
 const FREIGHT_EXCHANGE_SCENARIO_TITLE = 'Giełda transportowa - walka o 100 EUR';
-const freightExchangeOffers: FreightOffer[] = [
-  { id: 'offer-1', route: 'Warszawa -> Paryż', cargo: '24t, chłodnia', startingRate: 1200 },
-  { id: 'offer-2', route: 'Poznań -> Berlin', cargo: '21t, firanka', startingRate: 850 },
-  { id: 'offer-3', route: 'Łódź -> Mediolan', cargo: '18t, plandeka', startingRate: 1350 },
-  { id: 'offer-4', route: 'Gdańsk -> Rotterdam', cargo: '20t, kontener 40HC', startingRate: 980 },
-  { id: 'offer-5', route: 'Wrocław -> Wiedeń', cargo: '22t, ADR kl. 3', startingRate: 1100 },
-  { id: 'offer-6', route: 'Katowice -> Praga', cargo: '16t, chłodnia', startingRate: 760 },
-  { id: 'offer-7', route: 'Szczecin -> Hamburg', cargo: '24t, firanka', startingRate: 890 },
-  { id: 'offer-8', route: 'Lublin -> Bruksela', cargo: '19t, plandeka', startingRate: 1280 },
-  { id: 'offer-9', route: 'Białystok -> Lyon', cargo: '23t, chłodnia', startingRate: 1490 },
-  { id: 'offer-10', route: 'Rzeszów -> Antwerpia', cargo: '20t, firanka', startingRate: 1320 },
-];
+
+const generateRandomOffers = (count = 10): FreightOffer[] => {
+  const locations = [
+    'Warszawa',
+    'Poznań',
+    'Wrocław',
+    'Berlin',
+    'Paryż',
+    'Mediolan',
+    'Madryt',
+    'Londyn',
+    'Praga',
+    'Wiedeń',
+    'Gdańsk',
+    'Katowice',
+    'Hamburg',
+    'Rotterdam',
+  ];
+  const cargoTypes = ['24t, chłodnia', '24t, firanka', '21t, chłodnia', '3.5t, bus', '12t, solówka'];
+
+  return Array.from({ length: count }, (_, index) => {
+    const originIndex = Math.floor(Math.random() * locations.length);
+    let destinationIndex = Math.floor(Math.random() * locations.length);
+    while (destinationIndex === originIndex) {
+      destinationIndex = Math.floor(Math.random() * locations.length);
+    }
+    const roundedRate = Math.round((400 + Math.random() * 1400) / 10) * 10;
+    return {
+      id: `offer-${index + 1}`,
+      route: `${locations[originIndex]} -> ${locations[destinationIndex]}`,
+      cargo: cargoTypes[Math.floor(Math.random() * cargoTypes.length)] ?? '24t, firanka',
+      startingRate: roundedRate,
+    };
+  });
+};
+
 const disruptionEvents: DisruptionEvent[] = [
   {
     title: '🚨 BRAK DOKUMENTÓW',
@@ -182,6 +206,7 @@ export default function Page() {
   const [disruptionType, setDisruptionType] = useState<string | null>(null);
   const [activeDisruption, setActiveDisruption] = useState<DisruptionEvent | null>(null);
   const [selectedOffer, setSelectedOffer] = useState<FreightOffer | null>(null);
+  const [offers, setOffers] = useState<FreightOffer[]>([]);
   const hasInitializedRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inactivityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -244,6 +269,10 @@ export default function Page() {
   useEffect(() => {
     const isDisruptedSession = Math.random() < 0.3;
     setIsDisruptedSession(isDisruptedSession);
+  }, []);
+
+  useEffect(() => {
+    setOffers(generateRandomOffers(10));
   }, []);
 
   const isFreightExchangeScenario = scenario?.title === FREIGHT_EXCHANGE_SCENARIO_TITLE;
@@ -474,7 +503,7 @@ export default function Page() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800 text-sm">
-                  {freightExchangeOffers.map((offer) => (
+                  {offers.map((offer) => (
                     <tr key={offer.id} className="bg-zinc-900/70 text-zinc-200">
                       <td className="px-4 py-3 font-medium">{offer.route}</td>
                       <td className="px-4 py-3">{offer.cargo}</td>
