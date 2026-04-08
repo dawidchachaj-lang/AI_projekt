@@ -48,6 +48,8 @@ type FreightOffer = {
   route: string;
   cargo: string;
   startingRate: number;
+  estimatedCost: number;
+  estimatedProfit: number;
 };
 
 type FreightRoute = {
@@ -154,27 +156,31 @@ const generateRandomOffers = (count = 10): FreightOffer[] => {
     { origin: 'Białystok', destination: 'Berlin', distance: 690 },
     { origin: 'Wrocław', destination: 'Rotterdam', distance: 1080 },
   ];
-  const ratePerKmByCargo: Record<string, number> = {
-    '24t, chłodnia': 1.35,
-    '24t, firanka': 1.15,
-    '21t, chłodnia': 1.3,
-    '12t, solówka': 0.9,
-    '3.5t, bus': 0.55,
+  const economicsByCargo: Record<string, { revenuePerKm: number; costPerKm: number }> = {
+    '24t, chłodnia': { revenuePerKm: 1.35, costPerKm: 1.1 },
+    '24t, firanka': { revenuePerKm: 1.15, costPerKm: 0.95 },
+    '21t, chłodnia': { revenuePerKm: 1.3, costPerKm: 1.05 },
+    '12t, solówka': { revenuePerKm: 0.9, costPerKm: 0.7 },
+    '3.5t, bus': { revenuePerKm: 0.55, costPerKm: 0.4 },
   };
-  const cargoTypes = Object.keys(ratePerKmByCargo);
+  const cargoTypes = Object.keys(economicsByCargo);
 
   return Array.from({ length: count }, (_, index) => {
     const route = routes[Math.floor(Math.random() * routes.length)] ?? routes[0];
     const cargo = cargoTypes[Math.floor(Math.random() * cargoTypes.length)] ?? '24t, firanka';
-    const multiplier = ratePerKmByCargo[cargo] ?? 1.15;
-    const baseRate = route.distance * multiplier;
+    const economics = economicsByCargo[cargo] ?? { revenuePerKm: 1.15, costPerKm: 0.95 };
+    const baseRate = route.distance * economics.revenuePerKm;
     const marketVariance = 0.85 + Math.random() * 0.35;
     const roundedRate = Math.round((baseRate * marketVariance) / 10) * 10;
+    const estimatedCost = route.distance * economics.costPerKm;
+    const estimatedProfit = roundedRate - estimatedCost;
     return {
       id: `offer-${index + 1}`,
       route: `${route.origin} -> ${route.destination}`,
       cargo,
       startingRate: roundedRate,
+      estimatedCost,
+      estimatedProfit,
     };
   });
 };
@@ -225,6 +231,7 @@ export default function Page() {
   const [disruptionType, setDisruptionType] = useState<string | null>(null);
   const [activeDisruption, setActiveDisruption] = useState<DisruptionEvent | null>(null);
   const [selectedOffer, setSelectedOffer] = useState<FreightOffer | null>(null);
+  const [analyticalSelectionScore, setAnalyticalSelectionScore] = useState<number | null>(null);
   const [offers, setOffers] = useState<FreightOffer[]>([]);
   const hasInitializedRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -345,6 +352,7 @@ export default function Page() {
                 startingRate: selectedOffer.startingRate,
               }
             : null,
+          analyticalSelectionScore,
         }),
       });
 
@@ -409,6 +417,7 @@ export default function Page() {
   }, [
     scenarioId,
     selectedOffer,
+    analyticalSelectionScore,
     isCompleted,
     clearInactivityTimer,
     clearDisruptionTimer,
@@ -530,7 +539,19 @@ export default function Page() {
                       <td className="px-4 py-3 text-right">
                         <button
                           type="button"
-                          onClick={() => setSelectedOffer(offer)}
+                          onClick={() => {
+                            const maxProfit = offers.reduce(
+                              (max, current) =>
+                                current.estimatedProfit > max ? current.estimatedProfit : max,
+                              Number.NEGATIVE_INFINITY,
+                            );
+                            const score =
+                              offer.estimatedProfit <= 0 || !Number.isFinite(maxProfit) || maxProfit <= 0
+                                ? 0
+                                : Math.max(0, Math.min(1, offer.estimatedProfit / maxProfit));
+                            setAnalyticalSelectionScore(score);
+                            setSelectedOffer(offer);
+                          }}
                           className="rounded-lg bg-green-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-green-500"
                         >
                           Negocjuj
