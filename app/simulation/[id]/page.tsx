@@ -50,6 +50,12 @@ type FreightOffer = {
   startingRate: number;
 };
 
+type FreightRoute = {
+  origin: string;
+  destination: string;
+  distance: number;
+};
+
 const cleanContent = (text: string) => {
   if (!text) return '';
   return text.replace(/<coach_eval>[\s\S]*?<\/coach_eval>/g, '').trim();
@@ -126,35 +132,48 @@ const INACTIVITY_SYSTEM_MESSAGE =
 const FREIGHT_EXCHANGE_SCENARIO_TITLE = 'Giełda transportowa - walka o 100 EUR';
 
 const generateRandomOffers = (count = 10): FreightOffer[] => {
-  const locations = [
-    'Warszawa',
-    'Poznań',
-    'Wrocław',
-    'Berlin',
-    'Paryż',
-    'Mediolan',
-    'Madryt',
-    'Londyn',
-    'Praga',
-    'Wiedeń',
-    'Gdańsk',
-    'Katowice',
-    'Hamburg',
-    'Rotterdam',
+  const routes: FreightRoute[] = [
+    { origin: 'Warszawa', destination: 'Berlin', distance: 570 },
+    { origin: 'Poznań', destination: 'Paryż', distance: 1300 },
+    { origin: 'Rotterdam', destination: 'Madryt', distance: 1700 },
+    { origin: 'Gdańsk', destination: 'Rotterdam', distance: 1200 },
+    { origin: 'Wrocław', destination: 'Katowice', distance: 200 },
+    { origin: 'Mediolan', destination: 'Katowice', distance: 1100 },
+    { origin: 'Londyn', destination: 'Wrocław', distance: 1400 },
+    { origin: 'Poznań', destination: 'Warszawa', distance: 300 },
+    { origin: 'Praga', destination: 'Wiedeń', distance: 330 },
+    { origin: 'Szczecin', destination: 'Hamburg', distance: 370 },
+    { origin: 'Łódź', destination: 'Monachium', distance: 980 },
+    { origin: 'Kraków', destination: 'Bruksela', distance: 1350 },
+    { origin: 'Berlin', destination: 'Mediolan', distance: 1030 },
+    { origin: 'Wiedeń', destination: 'Paryż', distance: 1240 },
+    { origin: 'Katowice', destination: 'Amsterdam', distance: 1140 },
+    { origin: 'Lublin', destination: 'Praga', distance: 760 },
+    { origin: 'Rzeszów', destination: 'Budapeszt', distance: 460 },
+    { origin: 'Gdynia', destination: 'Hamburg', distance: 700 },
+    { origin: 'Białystok', destination: 'Berlin', distance: 690 },
+    { origin: 'Wrocław', destination: 'Rotterdam', distance: 1080 },
   ];
-  const cargoTypes = ['24t, chłodnia', '24t, firanka', '21t, chłodnia', '3.5t, bus', '12t, solówka'];
+  const ratePerKmByCargo: Record<string, number> = {
+    '24t, chłodnia': 1.35,
+    '24t, firanka': 1.15,
+    '21t, chłodnia': 1.3,
+    '12t, solówka': 0.9,
+    '3.5t, bus': 0.55,
+  };
+  const cargoTypes = Object.keys(ratePerKmByCargo);
 
   return Array.from({ length: count }, (_, index) => {
-    const originIndex = Math.floor(Math.random() * locations.length);
-    let destinationIndex = Math.floor(Math.random() * locations.length);
-    while (destinationIndex === originIndex) {
-      destinationIndex = Math.floor(Math.random() * locations.length);
-    }
-    const roundedRate = Math.round((400 + Math.random() * 1400) / 10) * 10;
+    const route = routes[Math.floor(Math.random() * routes.length)] ?? routes[0];
+    const cargo = cargoTypes[Math.floor(Math.random() * cargoTypes.length)] ?? '24t, firanka';
+    const multiplier = ratePerKmByCargo[cargo] ?? 1.15;
+    const baseRate = route.distance * multiplier;
+    const marketVariance = 0.85 + Math.random() * 0.35;
+    const roundedRate = Math.round((baseRate * marketVariance) / 10) * 10;
     return {
       id: `offer-${index + 1}`,
-      route: `${locations[originIndex]} -> ${locations[destinationIndex]}`,
-      cargo: cargoTypes[Math.floor(Math.random() * cargoTypes.length)] ?? '24t, firanka',
+      route: `${route.origin} -> ${route.destination}`,
+      cargo,
       startingRate: roundedRate,
     };
   });
