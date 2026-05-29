@@ -21,6 +21,24 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
+const buildAiErrorResponse = (error: unknown) => {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  const isQuotaError = /quota exceeded|rate limit/i.test(errorMessage);
+
+  return new Response(
+    JSON.stringify({
+      error: isQuotaError ? 'Przekroczono limit AI' : 'Błąd generowania odpowiedzi',
+      details: isQuotaError
+        ? 'Limit zapytan Gemini dla tego klucza API zostal wyczerpany. Sprobuj ponownie za chwile albo podmien klucz na taki z wiekszym limitem.'
+        : errorMessage,
+    }),
+    {
+      status: isQuotaError ? 429 : 500,
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+};
+
 export async function POST(req: Request) {
   try {
     const { messages = [], scenarioId, selectedOffer } = (await req.json()) as {
@@ -76,13 +94,57 @@ export async function POST(req: Request) {
           },
     );
 
-    return result.toTextStreamResponse();
+    const iterator = result.textStream[Symbol.asyncIterator]();
+    let firstChunk: Awaited<ReturnType<typeof iterator.next>>;
+
+    try {
+      firstChunk = await iterator.next();
+    } catch (error) {
+      console.error('Błąd AI przed rozpoczeciem streamu:', error);
+      return buildAiErrorResponse(error);
+    }
+
+    if (firstChunk.done || typeof firstChunk.value !== 'string' || firstChunk.value.length === 0) {
+      return new Response(
+        JSON.stringify({
+          error: 'Pusta odpowiedz AI',
+          details:
+            'Model nie zwrocil zadnej tresci. Najczesciej oznacza to problem po stronie providera albo przekroczony limit zapytan.',
+        }),
+        {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        controller.enqueue(encoder.encode(firstChunk.value));
+
+        try {
+          while (true) {
+            const chunk = await iterator.next();
+            if (chunk.done) break;
+            controller.enqueue(encoder.encode(chunk.value));
+          }
+        } catch (error) {
+          console.error('Błąd AI w trakcie streamu:', error);
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+      },
+    });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Błąd API:', error);
-    return new Response(
-      JSON.stringify({ error: 'Błąd generowania odpowiedzi', details: errorMessage }),
-      { status: 500 },
-    );
+    return buildAiErrorResponse(error);
   }
 }

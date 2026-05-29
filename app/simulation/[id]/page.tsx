@@ -303,6 +303,8 @@ export default function Page() {
 
   const isFreightExchangeScenario = scenario?.title === FREIGHT_EXCHANGE_SCENARIO_TITLE;
   const showFreightExchangeStep = !!isFreightExchangeScenario && !selectedOffer;
+  const showFreightExchangeChatHint =
+    !!isFreightExchangeScenario && !!selectedOffer && messages.length === 0 && !isLoading;
 
   const saveSimulationResults = useCallback(
     async (scores: EvaluationResult, chatHistory: ChatMessage[]) => {
@@ -357,7 +359,14 @@ export default function Page() {
       });
 
       if (!response.ok || !response.body) {
-        setError('Błąd odpowiedzi z serwera.');
+        let errorMessage = 'Błąd odpowiedzi z serwera.';
+        try {
+          const errorPayload = (await response.json()) as { error?: string; details?: string };
+          errorMessage = errorPayload.details || errorPayload.error || errorMessage;
+        } catch {
+          // Keep generic fallback when response body is not JSON.
+        }
+        setError(errorMessage);
         setIsLoading(false);
         return;
       }
@@ -393,6 +402,13 @@ export default function Page() {
             break;
           }
         }
+      }
+      if (!evaluationFound && accumulated.trim().length === 0) {
+        setMessages((prev) => prev.filter((message) => message.id !== assistantId));
+        setError(
+          'AI nie zwrocilo odpowiedzi. Najczesciej oznacza to chwilowy problem providera albo przekroczony limit zapytan Gemini.',
+        );
+        return;
       }
       shouldScheduleTimeout = !evaluationFound;
     } catch {
@@ -565,6 +581,15 @@ export default function Page() {
           </div>
         ) : (
           <div className="mx-auto flex max-w-4xl flex-col gap-4">
+            {showFreightExchangeChatHint && (
+              <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-100">
+                To Ty otwierasz rozmowe na gieldzie. Napisz do klienta w sprawie oferty{' '}
+                <span className="font-semibold text-white">
+                  {selectedOffer.route} / {selectedOffer.cargo} / {selectedOffer.startingRate} EUR
+                </span>
+                . Klient odpowie dopiero po Twojej pierwszej wiadomosci.
+              </div>
+            )}
             {messages.filter((message) => !message.hidden).map((message) => (
               <div
                 key={message.id}
@@ -757,7 +782,11 @@ export default function Page() {
               }}
               rows={2}
               className="flex-1 resize-none rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:border-green-500 focus:outline-none"
-              placeholder="Type your response..."
+              placeholder={
+                isFreightExchangeScenario && selectedOffer
+                  ? 'Np. Dzien dobry, temat aktualny? Mam auto gotowe do podjecia...'
+                  : 'Type your response...'
+              }
               disabled={isCompleted || !!activeDisruption}
             />
             <button
